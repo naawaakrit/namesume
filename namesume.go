@@ -5,7 +5,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -115,6 +119,51 @@ func calcName(name string) Result {
 	return res
 }
 
+// ---------- ความหมายของเลขผลรวม ----------
+
+// meanings เก็บความหมายของเลขแต่ละตัว โหลดจากไฟล์ meanings.txt
+// รูปแบบต่อบรรทัด:  เลข|ความหมาย   (บรรทัดที่ขึ้นต้นด้วย # ถือเป็นหมายเหตุ)
+var meanings = map[int]string{}
+
+func loadMeanings() {
+	paths := []string{"meanings.txt"}
+	if exe, err := os.Executable(); err == nil {
+		paths = append(paths, filepath.Join(filepath.Dir(exe), "meanings.txt"))
+	}
+	for _, p := range paths {
+		f, err := os.Open(p)
+		if err != nil {
+			continue
+		}
+		defer f.Close()
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for sc.Scan() {
+			line := strings.TrimSpace(sc.Text())
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			num, text, found := strings.Cut(line, "|")
+			if !found {
+				continue
+			}
+			n, err := strconv.Atoi(strings.TrimSpace(num))
+			if err != nil {
+				continue
+			}
+			meanings[n] = strings.TrimSpace(text)
+		}
+		return
+	}
+}
+
+func meaningFor(n int) string {
+	if m, ok := meanings[n]; ok && m != "" {
+		return m
+	}
+	return fmt.Sprintf("(ยังไม่มีความหมายของเลข %d ใน meanings.txt)", n)
+}
+
 // ---------- Fyne GUI ----------
 
 // renderSection เพิ่มหัวข้อ + ตารางตัวอักษรของชื่อ/นามสกุลลงใน box
@@ -133,15 +182,33 @@ func renderSection(box *fyne.Container, label string, res Result) {
 	}
 }
 
-// summaryLine สรุปผลรวมของชื่อ/นามสกุลหนึ่งส่วน
+// summaryLine สรุปผลรวมของชื่อ/นามสกุลหนึ่งส่วน พร้อมความหมายของเลข
 func summaryLine(label string, res Result) string {
+	if res.Total == 0 {
+		return fmt.Sprintf("%s — (ไม่มีตัวอักษรที่นับได้)", label)
+	}
 	return fmt.Sprintf(
-		"%s — รวม %d (อังกฤษ %d, พยัญชนะไทย %d, สระ %d, วรรณยุกต์ %d)",
+		"%s — รวม %d (อังกฤษ %d, พยัญชนะไทย %d, สระ %d, วรรณยุกต์ %d)\nความหมายเลข %d ของ%s: %s",
 		label, res.Total, res.SumEnglish, res.SumConsonant, res.SumVowel, res.SumTone,
+		res.Total, label, meaningFor(res.Total),
+	)
+}
+
+// combinedLine สรุปผลรวมของชื่อ + นามสกุล พร้อมความหมายของเลขรวม
+func combinedLine(a, b int) string {
+	t := a + b
+	if t == 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"ผลรวมทั้งหมด (ชื่อ + นามสกุล): %d + %d = %d\nความหมายเลข %d ของชื่อ + นามสกุล: %s",
+		a, b, t, t, meaningFor(t),
 	)
 }
 
 func main() {
+	loadMeanings()
+
 	a := app.New()
 	w := a.NewWindow("ผลรวมตัวอักษรชื่อ")
 	w.Resize(fyne.NewSize(460, 680))
@@ -168,6 +235,8 @@ func main() {
 
 	summary := widget.NewLabel("")
 	summary.Wrapping = fyne.TextWrapWord
+	summaryScroll := container.NewVScroll(summary)
+	summaryScroll.SetMinSize(fyne.NewSize(420, 180))
 
 	runCalc := func() {
 		first := strings.TrimSpace(firstEntry.Text)
@@ -191,7 +260,7 @@ func main() {
 		summary.SetText(strings.Join([]string{
 			summaryLine("ชื่อ", resFirst),
 			summaryLine("นามสกุล", resLast),
-			fmt.Sprintf("ผลรวมทั้งหมด (ชื่อ + นามสกุล): %d", resFirst.Total+resLast.Total),
+			combinedLine(resFirst.Total, resLast.Total),
 		}, "\n"))
 	}
 
@@ -206,7 +275,7 @@ func main() {
 		widget.NewSeparator(),
 		scroll,
 		widget.NewSeparator(),
-		summary,
+		summaryScroll,
 	)
 
 	w.SetContent(content)
