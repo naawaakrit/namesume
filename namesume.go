@@ -117,66 +117,91 @@ func calcName(name string) Result {
 
 // ---------- Fyne GUI ----------
 
-func main() {
-	a := app.NewWithID("com.naawaakrit.namesume")
-	//a.Settings().SetTheme(&MyTheme{})
-	//icon := loadIcon(64)
-	//a.SetIcon(icon)
+// renderSection เพิ่มหัวข้อ + ตารางตัวอักษรของชื่อ/นามสกุลลงใน box
+func renderSection(box *fyne.Container, label string, res Result) {
+	box.Add(widget.NewLabelWithStyle(
+		fmt.Sprintf("%s: %s", label, res.Name),
+		fyne.TextAlignLeading,
+		fyne.TextStyle{Bold: true},
+	))
+	if len(res.Scores) == 0 {
+		box.Add(widget.NewLabel("(ไม่มีตัวอักษรที่นับได้)"))
+		return
+	}
+	for _, s := range res.Scores {
+		box.Add(widget.NewLabel(fmt.Sprintf("%-6s %-14s %d", s.Char, s.Category, s.Value)))
+	}
+}
 
+// summaryLine สรุปผลรวมของชื่อ/นามสกุลหนึ่งส่วน
+func summaryLine(label string, res Result) string {
+	return fmt.Sprintf(
+		"%s — รวม %d (อังกฤษ %d, พยัญชนะไทย %d, สระ %d, วรรณยุกต์ %d)",
+		label, res.Total, res.SumEnglish, res.SumConsonant, res.SumVowel, res.SumTone,
+	)
+}
+
+func main() {
+	a := app.New()
 	w := a.NewWindow("ผลรวมตัวอักษรชื่อ")
-	w.Resize(fyne.NewSize(420, 600))
-	//w.SetIcon(icon)
+	w.Resize(fyne.NewSize(460, 680))
 
 	title := widget.NewLabelWithStyle(
-		"คำนวณผลรวมตัวอักษรชื่อ (ไทย/อังกฤษ)",
+		"คำนวณผลรวมตัวอักษรชื่อ-นามสกุล (ไทย/อังกฤษ)",
 		fyne.TextAlignCenter,
 		fyne.TextStyle{Bold: true},
 	)
 
-	input := widget.NewEntry()
-	input.SetPlaceHolder("พิมพ์ชื่อ เช่น สมชาย John")
+	firstEntry := widget.NewEntry()
+	firstEntry.SetPlaceHolder("เช่น สมชาย หรือ John")
+	lastEntry := widget.NewEntry()
+	lastEntry.SetPlaceHolder("เช่น ใจดี หรือ Smith")
+
+	form := widget.NewForm(
+		widget.NewFormItem("ชื่อ", firstEntry),
+		widget.NewFormItem("นามสกุล", lastEntry),
+	)
 
 	resultsBox := container.NewVBox()
 	scroll := container.NewVScroll(resultsBox)
-	scroll.SetMinSize(fyne.NewSize(380, 300))
+	scroll.SetMinSize(fyne.NewSize(420, 320))
 
 	summary := widget.NewLabel("")
 	summary.Wrapping = fyne.TextWrapWord
 
 	runCalc := func() {
-		name := strings.TrimSpace(input.Text)
+		first := strings.TrimSpace(firstEntry.Text)
+		last := strings.TrimSpace(lastEntry.Text)
+
 		resultsBox.Objects = nil // ล้างผลลัพธ์เก่า
-		if name == "" {
+		if first == "" && last == "" {
 			summary.SetText("")
 			resultsBox.Refresh()
 			return
 		}
-		res := calcName(name)
 
-		header := widget.NewLabelWithStyle(
-			fmt.Sprintf("%-6s %-14s %s", "ตัวอักษร", "หมวด", "ค่า"),
-			fyne.TextAlignLeading,
-			fyne.TextStyle{Bold: true},
-		)
-		resultsBox.Add(header)
-		for _, s := range res.Scores {
-			line := fmt.Sprintf("%-6s %-14s %d", s.Char, s.Category, s.Value)
-			resultsBox.Add(widget.NewLabel(line))
-		}
+		resFirst := calcName(first)
+		resLast := calcName(last)
+
+		renderSection(resultsBox, "ชื่อ", resFirst)
+		resultsBox.Add(widget.NewSeparator())
+		renderSection(resultsBox, "นามสกุล", resLast)
 		resultsBox.Refresh()
 
-		summary.SetText(fmt.Sprintf(
-			"ผลรวมอังกฤษ: %d\nผลรวมพยัญชนะไทย: %d\nผลรวมสระ: %d\nผลรวมวรรณยุกต์: %d\nผลรวมทั้งหมด: %d",
-			res.SumEnglish, res.SumConsonant, res.SumVowel, res.SumTone, res.Total,
-		))
+		summary.SetText(strings.Join([]string{
+			summaryLine("ชื่อ", resFirst),
+			summaryLine("นามสกุล", resLast),
+			fmt.Sprintf("ผลรวมทั้งหมด (ชื่อ + นามสกุล): %d", resFirst.Total+resLast.Total),
+		}, "\n"))
 	}
 
-	input.OnSubmitted = func(string) { runCalc() }
+	firstEntry.OnSubmitted = func(string) { runCalc() }
+	lastEntry.OnSubmitted = func(string) { runCalc() }
 	calcBtn := widget.NewButton("คำนวณ", runCalc)
 
 	content := container.NewVBox(
 		title,
-		input,
+		form,
 		calcBtn,
 		widget.NewSeparator(),
 		scroll,
