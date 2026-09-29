@@ -5,11 +5,7 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"unicode"
 
@@ -121,47 +117,19 @@ func calcName(name string) Result {
 
 // ---------- ความหมายของเลขผลรวม ----------
 
-// meanings เก็บความหมายของเลขแต่ละตัว โหลดจากไฟล์ meanings.txt
-// รูปแบบต่อบรรทัด:  เลข|ความหมาย   (บรรทัดที่ขึ้นต้นด้วย # ถือเป็นหมายเหตุ)
-var meanings = map[int]string{}
-
-func loadMeanings() {
-	paths := []string{"meanings.txt"}
-	if exe, err := os.Executable(); err == nil {
-		paths = append(paths, filepath.Join(filepath.Dir(exe), "meanings.txt"))
-	}
-	for _, p := range paths {
-		f, err := os.Open(p)
-		if err != nil {
-			continue
-		}
-		defer f.Close()
-		sc := bufio.NewScanner(f)
-		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		for sc.Scan() {
-			line := strings.TrimSpace(sc.Text())
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			num, text, found := strings.Cut(line, "|")
-			if !found {
-				continue
-			}
-			n, err := strconv.Atoi(strings.TrimSpace(num))
-			if err != nil {
-				continue
-			}
-			meanings[n] = strings.TrimSpace(text)
-		}
-		return
-	}
+// meanings เก็บความหมายของเลขแต่ละตัว แก้ไข/เพิ่มเลขได้ตรงนี้เลย
+// รูปแบบ:  เลข: "ความหมาย",
+var meanings = map[int]string{
+	// 15: "ใส่ความหมายของเลข 15 ที่นี่",
+	// 20: "ใส่ความหมายของเลข 20 ที่นี่",
+	// 35: "ใส่ความหมายของเลข 35 ที่นี่",
 }
 
 func meaningFor(n int) string {
 	if m, ok := meanings[n]; ok && m != "" {
 		return m
 	}
-	return fmt.Sprintf("(ยังไม่มีความหมายของเลข %d ใน meanings.txt)", n)
+	return fmt.Sprintf("(ยังไม่มีความหมายของเลข %d ในตาราง meanings)", n)
 }
 
 // ---------- Fyne GUI ----------
@@ -207,8 +175,6 @@ func combinedLine(a, b int) string {
 }
 
 func main() {
-	loadMeanings()
-
 	a := app.New()
 	w := a.NewWindow("ผลรวมตัวอักษรชื่อ")
 	w.Resize(fyne.NewSize(460, 680))
